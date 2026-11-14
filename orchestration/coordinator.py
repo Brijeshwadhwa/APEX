@@ -18,7 +18,7 @@ from agents.fairness_auditor import FairnessAuditorAgent
 
 
 class ScholarshipCoordinator:
-    """Coordinates multi-agent scholarship evaluation across the 6 specialist agents."""
+    """Coordinates multi-agent scholarship evaluation across the seven specialized agents."""
 
     def __init__(
         self,
@@ -116,9 +116,13 @@ class ScholarshipCoordinator:
         state.academic_result = merit_state.academic_result
         state.financial_result = fin_state.financial_result
         state.achievement_result = ach_state.achievement_result
-        state.trace_events.extend(merit_state.trace_events[-1:])
-        state.trace_events.extend(fin_state.trace_events[-1:])
-        state.trace_events.extend(ach_state.trace_events[-1:])
+        # Preserve all relevant specialist trace events without dropping events or introducing duplicates
+        existing_event_ids = {evt.event_id for evt in state.trace_events}
+        for spec_state in (merit_state, fin_state, ach_state):
+            for evt in spec_state.trace_events:
+                if evt.event_id not in existing_event_ids:
+                    state.trace_events.append(evt)
+                    existing_event_ids.add(evt.event_id)
 
         # Step 4: Fan-In through Panel Manager (Synthesizes composite score & recommendation)
         state.record_trace(

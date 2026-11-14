@@ -2,6 +2,7 @@
 
 import asyncio
 from decimal import Decimal
+import json
 import os
 import pytest
 
@@ -194,4 +195,68 @@ def test_statestore_json_persistence(tmp_path, sample_profile_1, sample_profile_
     assert loaded_s1.profile.full_name == "Candidate One"
     assert len(loaded_s1.history) == 1
     assert loaded_s1.history[0]["snapshot_label"] == "Intake complete"
+
+
+def test_persistence_unwritable_path_raises_ioerror(sample_profile_1):
+    """Test that saving to an unwritable/illegal path raises IOError and records error status."""
+    store = StateStore()
+    s1 = EvaluationState(applicant_id="APP-001", profile=sample_profile_1)
+    store._states["APP-001"] = s1
+
+    # On Windows, path containing invalid characters or illegal root raises IOError/OSError
+    invalid_file = "Z:\\nonexistent_drive_9999\\cannot_write.json"
+    with pytest.raises(IOError):
+        store.save_to_json(invalid_file)
+
+    assert store.last_persistence_error is not None
+    assert "Error" in store.persistence_status
+
+
+def test_persistence_corrupted_json_raises_value_error(tmp_path):
+    """Test that loading a corrupted JSON file raises ValueError and updates persistence status."""
+    bad_json = tmp_path / "corrupted.json"
+    with open(str(bad_json), "w", encoding="utf-8") as f:
+        f.write("{ invalid json content: [unclosed")
+
+    store = StateStore()
+    with pytest.raises(ValueError) as exc:
+        store.load_from_json(str(bad_json))
+
+    assert "Corrupted JSON" in str(exc.value)
+    assert store.persistence_status == "Error: Corrupted JSON"
+
+
+def test_persistence_partial_corruption_recovery(tmp_path, sample_profile_1):
+    """Test that loading a state file with one valid and one corrupted applicant recovers valid records."""
+    s1 = EvaluationState(applicant_id="APP-001", profile=sample_profile_1)
+    partial_file = tmp_path / "partial.json"
+    data = {
+        "rubric_version": "1.0.0",
+        "config_hash": "testhash123",
+        "applicants": {
+            "APP-001": json.loads(s1.model_dump_json()),
+            "APP-CORRUPT": {"invalid_key": "not a valid EvaluationState"},
+        },
+    }
+    with open(str(partial_file), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    store = StateStore()
+    recovered_count = store.load_from_json(str(partial_file))
+    assert recovered_count == 1
+    assert "APP-001" in store._states
+    assert "APP-CORRUPT" not in store._states
+    assert "1 corrupted skipped" in store.persistence_status
+
+
+@pytest.mark.asyncio
+async def test_save_state_auto_save_failure_raises(sample_profile_1):
+    """Test that save_state raises an exception if disk persistence fails, never falsely reporting success."""
+    invalid_path = "Z:\\nonexistent_drive_9999\\bad.json"
+    store = StateStore(persistence_file_path=invalid_path)
+    s1 = EvaluationState(applicant_id="APP-001", profile=sample_profile_1)
+
+    with pytest.raises(IOError):
+        await store.save_state(s1)
+
 

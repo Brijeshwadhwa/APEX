@@ -23,3 +23,7 @@ execution_audit.jsonl
 test_audit.jsonl
 *.jsonl
 *.log
+
+# Explicitly track sanitized, reproducible demonstration audit log for CA2 submission
+!demonstration_audit.jsonl
+!data/demonstration_audit.jsonl

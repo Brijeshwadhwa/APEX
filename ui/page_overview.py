@@ -50,7 +50,10 @@ def render_overview_page(coordinator, store, logger, all_states, leaderboard):
     st.markdown("<br>", unsafe_allow_html=True)
 
     # --- SECONDARY KPI METRICS ---
-    k1, k2, k3 = st.columns(3)
+    if getattr(store, "last_persistence_error", None):
+        st.error(f"⚠️ Persistence Warning: {store.last_persistence_error}")
+
+    k1, k2, k3, k4 = st.columns(4)
     with k1:
         render_stat_card("Mean Composite Score", f"{avg_score:.2f} / 100", "Eligible cohort average", "📈", "#2563EB")
     with k2:
@@ -58,6 +61,10 @@ def render_overview_page(coordinator, store, logger, all_states, leaderboard):
     with k3:
         adjudicated_count = sum(1 for s in all_states if s.status != "INTAKE")
         render_stat_card("Evaluation Progress", f"{adjudicated_count} / {total_evaluated}", f"{(adjudicated_count/total_evaluated*100):.0f}% adjudicated" if total_evaluated else "0%", "⚙️", "#475569")
+    with k4:
+        p_status = getattr(store, "persistence_status", "Active")
+        p_color = "#DC2626" if "Error" in p_status else "#059669"
+        render_stat_card("State Persistence", p_status, "Atomic JSON Storage", "💾", p_color)
 
     st.markdown("<br>", unsafe_allow_html=True)
 

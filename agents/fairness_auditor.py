@@ -54,7 +54,7 @@ class FairnessAuditPlugin:
         notes = (
             f"BIAS DETECTED: Disallowed demographic attribute(s) {flagged_attributes} referenced in evaluation rationales. Violates Clause 4.1."
             if bias_detected
-            else "Bias Audit Passed: Evaluation strictly blind to prohibited demographic attributes (Clause 4.1 compliant)."
+            else "Heuristic Non-Discrimination Scan Passed: No overt prohibited demographic attribute references detected in rationales (Clause 4.1 compliant). [Limitation Note: Syntactic pattern scanning checks explicit terms; latent proxy bias requires human committee review]."
         )
 
         return json.dumps({

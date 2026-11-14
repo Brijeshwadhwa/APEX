@@ -341,3 +341,66 @@ async def test_api_keys_never_leak_in_logs_or_state(sample_profile, real_retriev
     # Inspect state serialization
     state_json = state.model_dump_json()
     assert secret_key not in state_json
+
+
+def test_gemini_prompts_exclude_direct_identifiers_and_minimize_finances(sample_profile):
+    """PRIVACY REGRESSION TEST: Proves that direct identifiers and raw finances are excluded from Gemini prompts."""
+    service = GeminiService(api_key="AIzaDummyValidKeyForTesting12345")
+
+    captured_prompts = []
+
+    def mock_generate_content(model, contents, config=None):
+        captured_prompts.append(contents)
+        resp = MagicMock()
+        resp.text = json.dumps({
+            "profile_summary": "Anonymized candidate profile summary",
+            "academic_observations": "Good academic performance",
+            "financial_summary": "Assessed under Tier 2 financial band",
+            "achievement_summary": "1 achievement",
+            "strengths": ["Strong academics"],
+            "areas_requiring_verification": [],
+            "missing_information_warnings": [],
+            "report_title": "Official Scholarship Adjudication Report: [ANONYMIZED_CANDIDATE]",
+            "executive_summary": "Summary",
+            "evaluation_breakdown": "Breakdown",
+            "recommendation_explanation": "Recommended",
+            "rubric_references": ["Clause 1.1"],
+            "full_report_markdown": "# Report for [ANONYMIZED_CANDIDATE]",
+            "eligibility_explanation": "Eligible",
+            "merit_explanation": "Merit evaluated",
+            "financial_need_explanation": "Financial need evaluated",
+            "achievement_explanation": "Achievements verified",
+            "panel_recommendation_explanation": "Panel approved",
+            "fairness_audit_explanation": "Audit passed",
+        })
+        return resp
+
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = mock_generate_content
+    service._client = mock_client
+
+    state = EvaluationState(applicant_id=sample_profile.applicant_id, profile=sample_profile)
+    state.status = "ELIGIBLE_CONFIRMED"
+    state.total_score = Decimal("88.0")
+    state.recommendation = "High Priority"
+
+    # 1. Profile Analysis
+    service.analyze_applicant_profile(sample_profile)
+    # 2. Evaluation Findings Explanation
+    service.explain_evaluation_results(state)
+    # 3. Formal Committee Report
+    service.generate_committee_report(state)
+
+    assert len(captured_prompts) == 3
+
+    for prompt in captured_prompts:
+        # Direct Identifiers must be 100% EXCLUDED
+        assert sample_profile.full_name not in prompt, f"Full name leaked in prompt: {prompt}"
+        assert sample_profile.applicant_id not in prompt, f"Applicant ID leaked in prompt: {prompt}"
+        assert sample_profile.email not in prompt, f"Email leaked in prompt: {prompt}"
+        # Exact raw numeric income amount must NOT be transmitted
+        assert "180000" not in prompt, f"Raw financial amount leaked in prompt: {prompt}"
+        assert "₹180,000" not in prompt, f"Formatted financial amount leaked in prompt: {prompt}"
+        # Anonymized reference must be present
+        assert "[ANONYMIZED_CANDIDATE]" in prompt or "[ANONYMIZED_RECORD]" in prompt
+

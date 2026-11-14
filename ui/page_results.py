@@ -111,6 +111,7 @@ def render_results_page(coordinator, store, logger, all_states, selected_applica
             col_g_info, col_g_btn = st.columns([3, 1.2])
             with col_g_info:
                 st.markdown(f"Generate a formal publication-grade committee dossier analysis using **{gemini_service.model_name}**.")
+                st.caption("🔒 Privacy Disclosure: Candidate name and ID are stripped prior to external Gemini processing; financial figures are minimized to broad bands.")
             with col_g_btn:
                 do_gen = st.button("Generate Detailed AI Report", key=f"btn_rep_{target_id}", type="primary", use_container_width=True)
 

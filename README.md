@@ -8,7 +8,7 @@
 
 ## 1. System Overview & Architecture
 
-The **Automated Grant & Scholarship Application Evaluator** is an enterprise-grade multi-agent system designed to review scholarship applicants, evaluate academic excellence, financial need, and extracurricular achievements against an official published rubric, and issue policy-grounded recommendations (*High Priority*, *Recommended*, *Consider*, or *Ineligible*).
+The **Automated Grant & Scholarship Application Evaluator** is an enterprise-grade multi-agent system comprising seven specialized Microsoft Semantic Kernel agents designed to review scholarship applicants, evaluate academic excellence, financial need, and extracurricular achievements against a project-created demonstration rubric (synthetic coursework specification for CSE476), and issue policy-grounded recommendations (*High Priority*, *Recommended*, *Consider*, or *Ineligible*).
 
 ### Why the Fan-Out / Fan-In Architecture Fits
 Scholarship adjudication involves multiple independent evaluation dimensions that can be assessed concurrently once basic eligibility is established:
@@ -66,12 +66,13 @@ Every agent is developed as an independent module under `agents/` and invokes at
 
 ## 3. RAG Knowledge Base & Shared Memory
 
-* **RAG Knowledge Base (`rag/scholarship_rubric.md`):** Contains official clauses governing academic cutoffs, income brackets, tier points, recommendation thresholds, and non-discrimination mandates. The `RubricRetriever` indexes all clauses and attaches citations to justifications.
+* **RAG Knowledge Base (`rag/scholarship_rubric.md`):** Contains policy clauses governing academic cutoffs, income brackets, tier points, recommendation thresholds, and non-discrimination mandates. (Provenance Notice: Author-created synthetic demonstration rubric designed specifically for the CSE476 Agentic AI specification). The `RubricRetriever` indexes all clauses and attaches citations to justifications.
 * **Shared Memory & StateStore (`core/shared_state.py`):**
   * `EvaluationState`: Isolated per applicant dossier. Contains profile, specialist results, total score, recommendation, and execution telemetry.
   * **Deep-Copy Isolation:** When reading or saving state, objects are deep-copied under an `asyncio.Lock` to prevent cross-applicant data leakage during parallel evaluation.
+  * **Disk Persistence:** Atomically persisted to `data/state_store.json` using temporary file replacement and explicit error propagation.
   * **Historical Snapshots:** Every state transition captures an immutable milestone snapshot in the applicant's history.
-* **Append-Only Audit Logger (`core/audit_logger.py`):** Writes every tool invocation, duration, status, rubric version, and SHA-256 configuration hash into `execution_audit.jsonl` using append-mode (`a`). Never overwrites existing logs.
+* **Append-Only Audit Logger (`core/audit_logger.py`):** Writes every tool invocation, duration, status, rubric version, and SHA-256 configuration hash into `demonstration_audit.jsonl` (and runtime `execution_audit.jsonl`) using append-mode (`a`). Never overwrites existing logs.
 
 ---
 

@@ -228,6 +228,7 @@ with st.sidebar:
         <div>• <b>Engine:</b> Semantic Kernel 1.47</div>
         <div>• <b>Rubric:</b> v{RUBRIC_VERSION}</div>
         <div>• <b>Config Hash:</b> <code>{get_configuration_hash()[:10]}...</code></div>
+        <div>• <b>Persistence:</b> {getattr(store, 'persistence_status', 'Active')}</div>
     </div>
     """, unsafe_allow_html=True)
 

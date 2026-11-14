@@ -10,10 +10,13 @@ import copy
 from datetime import datetime, timezone
 from decimal import Decimal
 import json
+import logging
 import os
 import threading
 from typing import Any, Callable, Dict, List, Optional
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from core.schemas import (
     ApplicantProfile,
@@ -158,21 +161,26 @@ class StateStore:
         self._lock_loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread_lock = threading.Lock()
         self.persistence_file_path = os.path.abspath(persistence_file_path) if persistence_file_path else None
+        self.persistence_status: str = "Active" if self.persistence_file_path else "In-Memory Only"
+        self.last_persistence_error: Optional[str] = None
+        self.last_saved_at: Optional[str] = None
+        self.last_loaded_at: Optional[str] = None
 
         if self.persistence_file_path and os.path.exists(self.persistence_file_path):
             try:
                 self.load_from_json(self.persistence_file_path)
-            except Exception:
-                # Safe recovery on corrupt or partial file
-                pass
+            except Exception as e:
+                self.last_persistence_error = f"Initial load warning: {type(e).__name__}: {e}"
+                self.persistence_status = f"Recovery Mode ({type(e).__name__})"
+                logger.warning(self.last_persistence_error)
 
     def _auto_save_to_disk(self) -> None:
-        """Internal helper to automatically sync memory states to JSON disk storage."""
+        """Internal helper to automatically sync memory states to JSON disk storage.
+        
+        Propagates IO/OS errors to prevent false reporting of successful persistence.
+        """
         if self.persistence_file_path:
-            try:
-                self.save_to_json(self.persistence_file_path)
-            except Exception:
-                pass
+            self.save_to_json(self.persistence_file_path)
 
     def _get_lock(self) -> asyncio.Lock:
         """Lazily initialize asyncio.Lock inside active event loop, rebinding if loop changes."""
@@ -244,10 +252,18 @@ class StateStore:
         self._auto_save_to_disk()
 
     def save_to_json(self, file_path: str) -> None:
-        """Synchronously persist all stored evaluation states to a JSON file."""
+        """Synchronously and atomically persist all stored evaluation states to a JSON file."""
         with self._thread_lock:
             target_path = os.path.abspath(file_path)
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            target_dir = os.path.dirname(target_path)
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+            except Exception as e:
+                self.last_persistence_error = f"Directory creation failed: {e}"
+                self.persistence_status = "Error: Directory Creation Failed"
+                logger.error(self.last_persistence_error)
+                raise IOError(f"Cannot create persistence directory '{target_dir}': {e}") from e
+
             data = {
                 "rubric_version": RUBRIC_VERSION,
                 "config_hash": get_configuration_hash(),
@@ -257,26 +273,70 @@ class StateStore:
                     for app_id, state in self._states.items()
                 },
             }
-            with open(target_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            tmp_path = f"{target_path}.tmp_{os.getpid()}_{threading.get_ident()}"
+            try:
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(tmp_path, target_path)
+                self.last_persistence_error = None
+                self.last_saved_at = _utc_now_iso()
+                self.persistence_status = f"Saved ({len(self._states)} records)"
+            except Exception as e:
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+                self.last_persistence_error = f"File write error: {type(e).__name__}: {e}"
+                self.persistence_status = "Error: Write Failed"
+                logger.error(self.last_persistence_error)
+                raise IOError(f"Failed to persist state store to '{target_path}': {e}") from e
 
-    def load_from_json(self, file_path: str) -> None:
-        """Load evaluation states from a JSON file with resilient corruption handling."""
+    def load_from_json(self, file_path: str) -> int:
+        """Load evaluation states from a JSON file with clear reporting and resilient corruption handling."""
         target_path = os.path.abspath(file_path)
         if not os.path.exists(target_path):
-            raise FileNotFoundError(f"State file '{target_path}' does not exist.")
+            self.last_persistence_error = f"State file '{target_path}' does not exist."
+            self.persistence_status = "Error: File Not Found"
+            raise FileNotFoundError(self.last_persistence_error)
+
         with self._thread_lock:
-            with open(target_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            try:
+                with open(target_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except json.JSONDecodeError as jde:
+                self.last_persistence_error = f"Corrupted JSON in state file '{target_path}': {jde}"
+                self.persistence_status = "Error: Corrupted JSON"
+                logger.error(self.last_persistence_error)
+                raise ValueError(self.last_persistence_error) from jde
+            except Exception as e:
+                self.last_persistence_error = f"Error reading state file '{target_path}': {e}"
+                self.persistence_status = f"Error: {type(e).__name__}"
+                logger.error(self.last_persistence_error)
+                raise IOError(self.last_persistence_error) from e
+
+            if not isinstance(data, dict) or "applicants" not in data:
+                self.last_persistence_error = f"Invalid schema in state file '{target_path}': missing 'applicants' mapping."
+                self.persistence_status = "Error: Invalid Schema"
+                raise ValueError(self.last_persistence_error)
 
             applicants = data.get("applicants", {})
             loaded_states: Dict[str, EvaluationState] = {}
+            corrupted_count = 0
             for app_id, state_dict in applicants.items():
                 try:
                     loaded_states[app_id] = EvaluationState.model_validate(state_dict)
-                except Exception:
-                    # Safely skip unparseable records to prevent whole application crash
-                    continue
+                except Exception as ex:
+                    corrupted_count += 1
+                    logger.warning(f"Skipped unparseable applicant record '{app_id}': {ex}")
 
             self._states = loaded_states
+            self.last_loaded_at = _utc_now_iso()
+            if corrupted_count > 0:
+                self.last_persistence_error = f"Recovered {len(loaded_states)} valid records; skipped {corrupted_count} corrupted records."
+                self.persistence_status = f"Recovered ({len(loaded_states)} records, {corrupted_count} corrupted skipped)"
+            else:
+                self.last_persistence_error = None
+                self.persistence_status = f"Loaded ({len(loaded_states)} records)"
+            return len(loaded_states)
 

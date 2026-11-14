@@ -208,3 +208,26 @@ async def test_persistence_across_simulated_restart(tmp_path, applicants_data):
     assert restored_state.status == evaluated_state.status
     assert restored_state.recommendation == evaluated_state.recommendation
 
+
+@pytest.mark.asyncio
+async def test_specialist_trace_events_fully_preserved_without_duplicates(coordinator, applicants_data):
+    """Proves that all specialist trace events are preserved without truncation and without duplicates."""
+    sample = applicants_data[0]  # Aarav Sharma: has multiple achievements
+    state = await coordinator.evaluate_applicant(sample)
+
+    event_ids = [e.event_id for e in state.trace_events]
+    assert len(event_ids) == len(set(event_ids)), "Duplicate trace event IDs detected!"
+
+    senders = [e.sender for e in state.trace_events]
+    event_types = [e.event_type for e in state.trace_events]
+
+    assert "MeritAgent" in senders
+    assert "FinancialAgent" in senders
+    assert "AchievementAgent" in senders
+    assert "ACADEMIC_EVALUATED" in event_types
+    assert "FINANCIAL_EVALUATED" in event_types
+    assert "ACHIEVEMENT_EVALUATED" in event_types
+    assert "PANEL_DECISION" in event_types or "DECISION_ADJUDICATED" in event_types
+    assert "AUDIT_COMPLETED" in event_types
+
+

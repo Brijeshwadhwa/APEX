@@ -52,6 +52,22 @@ else:
 logger = logging.getLogger("gemini_service")
 
 
+def _minimize_income_band(inc: Optional[float]) -> str:
+    """Anonymizes and categorizes household income into high-level evaluation bands."""
+    if inc is None:
+        return "Income Document Missing / Unverified"
+    if inc <= 150000:
+        return "Tier 1: Annual household income <= INR 150,000 (Maximum Need)"
+    elif inc <= 300000:
+        return "Tier 2: Annual household income between INR 150,001 and 300,000"
+    elif inc <= 450000:
+        return "Tier 3: Annual household income between INR 300,001 and 450,000"
+    elif inc <= 600000:
+        return "Tier 4: Annual household income between INR 450,001 and 600,000"
+    else:
+        return "Tier 5: Annual household income > INR 600,000 (Above Rubric Ceiling)"
+
+
 class GeminiService:
     """Manages Google Gemini API interactions, explanations, reports, and RAG Q&A."""
 
@@ -168,18 +184,15 @@ class GeminiService:
         if not self.is_configured:
             return self._fallback_analysis(profile, "Gemini API key is not configured.")
 
-        # Build token-efficient structured prompt
+        # Build token-efficient structured prompt with direct identifiers stripped and income minimized
         acad_desc = f"{profile.academic_percentage:.2f}%" if profile.academic_percentage is not None else "MISSING / UNVERIFIED"
-        inc_desc = f"₹{profile.household_income:,.0f}" if profile.household_income is not None else "MISSING / UNVERIFIED"
+        minimized_income = _minimize_income_band(profile.household_income)
         achs_desc = "\n".join([f"- {a.title} ({a.level}, Verified: {a.is_verified})" for a in profile.achievements]) or "No achievements claimed."
 
-        prompt = f"""You are an institutional scholarship admissions analyst. Analyze this applicant dossier:
-Applicant ID: {profile.applicant_id}
-Full Name: {profile.full_name}
-Degree Program: {profile.program_of_study or 'N/A'}
-Institution: {profile.institution or 'N/A'}
-Academic Percentage: {acad_desc}
-Annual Household Income: {inc_desc}
+        prompt = f"""You are an institutional scholarship admissions analyst. Analyze this anonymized applicant dossier (direct identifiers stripped for privacy):
+Candidate Reference: [ANONYMIZED_CANDIDATE]
+Academic Aggregate: {acad_desc}
+Financial Need Category: {minimized_income}
 Extracurricular Achievements:
 {achs_desc}
 
@@ -216,7 +229,7 @@ Return ONLY JSON without markdown fences."""
                 applicant_id=profile.applicant_id,
                 profile_summary=data.get("profile_summary", f"Profile for {profile.full_name}"),
                 academic_observations=data.get("academic_observations", f"Academic score: {acad_desc}"),
-                financial_summary=data.get("financial_summary", f"Household income: {inc_desc}"),
+                financial_summary=data.get("financial_summary", f"Financial Category: {minimized_income}"),
                 achievement_summary=data.get("achievement_summary", f"{len(profile.achievements)} achievements submitted."),
                 strengths=data.get("strengths", []),
                 areas_requiring_verification=data.get("areas_requiring_verification", []),
@@ -275,7 +288,7 @@ Return ONLY JSON without markdown fences."""
 
         prompt = f"""You are an institutional scholarship adjudication explainer. Ground your explanations STRICTLY in the following specialist agent outputs. Do NOT change, contradict, or speculate beyond these findings:
 
-APPLICANT: {state.applicant_id} ({state.profile.full_name})
+CANDIDATE: [ANONYMIZED_CANDIDATE]
 FINAL STATUS: {state.status}
 COMPOSITE SCORE: {panel_score_desc}
 RECOMMENDATION: {panel_tier_desc}
@@ -359,17 +372,14 @@ Return ONLY JSON without markdown fences."""
 
         p = state.profile
         acad_desc = f"{p.academic_percentage:.2f}%" if p.academic_percentage is not None else "Missing"
-        inc_desc = f"₹{p.household_income:,.0f}" if p.household_income is not None else "Missing"
+        minimized_income = _minimize_income_band(p.household_income)
         score_desc = f"{state.total_score:.2f} / 100.0" if state.total_score is not None else "Excluded"
 
-        prompt = f"""You are the Lead Secretary of the Central Scholarship Adjudication Committee. Draft a formal committee adjudication report for this candidate:
+        prompt = f"""You are the Lead Secretary of the Central Scholarship Adjudication Committee. Draft a formal committee adjudication report for this candidate (all direct identifiers stripped for privacy):
 
-Applicant ID: {state.applicant_id}
-Candidate Name: {p.full_name}
-Degree Program: {p.program_of_study or 'N/A'}
-Institution: {p.institution or 'N/A'}
+Candidate Reference: [ANONYMIZED_CANDIDATE]
 Academic Record: {acad_desc}
-Household Income: {inc_desc}
+Financial Need Assessment Band: {minimized_income}
 Adjudication Status: {state.status}
 Composite Score: {score_desc}
 Recommendation: {state.recommendation}
@@ -383,7 +393,7 @@ Fairness Audit: {state.audit_result.audit_notes if state.audit_result else 'N/A'
 
 Format output strictly as JSON with keys:
 {{
-  "report_title": "Official Scholarship Adjudication Report: [Candidate Name]",
+  "report_title": "Official Scholarship Adjudication Report: [ANONYMIZED_CANDIDATE]",
   "executive_summary": "Executive summary paragraph explaining decision and ranking status",
   "evaluation_breakdown": "Summary paragraph detailing merit, need, and achievement scores",
   "main_strengths": ["bullet 1", "bullet 2"],
@@ -410,16 +420,21 @@ Return ONLY JSON without markdown fences."""
             raw_text = re.sub(r"\s*```$", "", raw_text)
             data = json.loads(raw_text)
 
+            raw_title = data.get("report_title", f"Official Scholarship Adjudication Report: [ANONYMIZED_CANDIDATE]")
+            formatted_title = raw_title.replace("[ANONYMIZED_CANDIDATE]", f"{p.full_name} ({state.applicant_id})")
+            raw_markdown = data.get("full_report_markdown", "")
+            formatted_markdown = raw_markdown.replace("[ANONYMIZED_CANDIDATE]", f"{p.full_name} ({state.applicant_id})")
+
             res = GeminiReportResult(
                 applicant_id=state.applicant_id,
-                report_title=data.get("report_title", f"Adjudication Report: {p.full_name}"),
+                report_title=formatted_title,
                 executive_summary=data.get("executive_summary", ""),
                 evaluation_breakdown=data.get("evaluation_breakdown", ""),
                 main_strengths=data.get("main_strengths", []),
                 concerns_and_missing_info=data.get("concerns_and_missing_info", []),
                 recommendation_explanation=data.get("recommendation_explanation", ""),
                 rubric_references=data.get("rubric_references", ["Clause 1.1", "Clause 2.1", "Clause 3.1"]),
-                full_report_markdown=data.get("full_report_markdown", ""),
+                full_report_markdown=formatted_markdown,
             )
             self._report_cache[cache_key] = res
             return res

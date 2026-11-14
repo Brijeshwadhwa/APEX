@@ -40,6 +40,9 @@ def render_ai_assistant_page(
             <div style="font-size: 0.85rem; color: #64748B; margin-top: 4px;">
                 Active Model: <b>{gemini_service.model_name}</b> | Credentials: <b>{'Loaded securely from .env' if is_cfg else 'Missing in .env'}</b>
             </div>
+            <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 8px 12px; margin-top: 8px; font-size: 0.8rem; color: #334155; line-height: 1.4;">
+                🔒 <b>External LLM Processing & Privacy Disclosure:</b> Qualitative synthesis is performed externally via Google Gemini. In strict adherence to institutional data governance (Clause 4.1), all direct identifiers (names, applicant IDs) are redacted prior to API transmission, and financial data is minimized into broad categorical bands.
+            </div>
             """, unsafe_allow_html=True)
         with col_st2:
             test_clicked = st.button("⚡ Test Gemini Connectivity", key="test_gemini_btn", width="stretch")
