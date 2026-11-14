@@ -1,0 +1,415 @@
+[
+  {
+    "applicant_id": "APP-2026-001",
+    "full_name": "Aarav Sharma",
+    "email": "aarav.sharma@example.edu",
+    "academic_percentage": 92.5,
+    "household_income": 120000.0,
+    "program_of_study": "B.Tech Computer Science",
+    "institution": "National Institute of Technology",
+    "achievements": [
+      {
+        "id": "ACH-001",
+        "title": "International Collegiate Hackathon Winner",
+        "level": "INTERNATIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-INT-991"
+      },
+      {
+        "id": "ACH-002",
+        "title": "National Math Olympiad Gold Medalist",
+        "level": "NATIONAL",
+        "is_verified": true,
+        "year": 2024,
+        "certificate_id": "CERT-NAT-442"
+      }
+    ],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "Excellent academic track record and verified international achievements."
+  },
+  {
+    "applicant_id": "APP-2026-002",
+    "full_name": "Bhavya Patel",
+    "email": "bhavya.patel@example.edu",
+    "academic_percentage": 82.0,
+    "household_income": 145000.0,
+    "program_of_study": "B.Sc Data Science",
+    "institution": "State University of Technology",
+    "achievements": [
+      {
+        "id": "ACH-003",
+        "title": "State Level Science Exhibition Winner",
+        "level": "STATE",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-STA-331"
+      },
+      {
+        "id": "ACH-004",
+        "title": "District Debate Runner-up",
+        "level": "DISTRICT",
+        "is_verified": true,
+        "year": 2024,
+        "certificate_id": "CERT-DIS-112"
+      }
+    ],
+    "gender": "Female",
+    "category": "OBC",
+    "religion": "Jain",
+    "notes": "Strong need and consistent academic performance."
+  },
+  {
+    "applicant_id": "APP-2026-003",
+    "full_name": "Chirag Verma",
+    "email": "chirag.verma@example.edu",
+    "academic_percentage": 78.5,
+    "household_income": 220000.0,
+    "program_of_study": "B.E. Mechanical Engineering",
+    "institution": "Delhi Technical Institute",
+    "achievements": [
+      {
+        "id": "ACH-005",
+        "title": "National Robotics Championship Semi-Finalist",
+        "level": "NATIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-NAT-551"
+      }
+    ],
+    "gender": "Male",
+    "category": "SC",
+    "religion": "Hindu",
+    "notes": "Verified national achievement and qualifying income."
+  },
+  {
+    "applicant_id": "APP-2026-004",
+    "full_name": "Divya Nambiar",
+    "email": "divya.n@example.edu",
+    "academic_percentage": 74.0,
+    "household_income": 320000.0,
+    "program_of_study": "B.Sc Biotechnology",
+    "institution": "Southern Central College",
+    "achievements": [
+      {
+        "id": "ACH-006",
+        "title": "State Science Symposium Presenter",
+        "level": "STATE",
+        "is_verified": true,
+        "year": 2024,
+        "certificate_id": "CERT-STA-882"
+      }
+    ],
+    "gender": "Female",
+    "category": "General",
+    "religion": "Christian",
+    "notes": "Moderate income band with state-level presentation."
+  },
+  {
+    "applicant_id": "APP-2026-005",
+    "full_name": "Eshan Mukherjee",
+    "email": "eshan.m@example.edu",
+    "academic_percentage": 68.0,
+    "household_income": 480000.0,
+    "program_of_study": "B.Com Honors",
+    "institution": "Eastern Commerce University",
+    "achievements": [
+      {
+        "id": "ACH-007",
+        "title": "District Athletic Meet 400m Gold",
+        "level": "DISTRICT",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-DIS-992"
+      }
+    ],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "Meets minimums across all dimensions."
+  },
+  {
+    "applicant_id": "APP-2026-006",
+    "full_name": "Farhan Ali",
+    "email": "farhan.ali@example.edu",
+    "academic_percentage": 62.0,
+    "household_income": 550000.0,
+    "program_of_study": "B.A. Political Science",
+    "institution": "City Liberal Arts College",
+    "achievements": [],
+    "gender": "Male",
+    "category": "Minority",
+    "religion": "Muslim",
+    "notes": "Low priority candidate with minimum qualifying score."
+  },
+  {
+    "applicant_id": "APP-2026-007",
+    "full_name": "Gaurav Joshi",
+    "email": "gaurav.joshi@example.edu",
+    "academic_percentage": 54.0,
+    "household_income": 110000.0,
+    "program_of_study": "B.Tech Electrical",
+    "institution": "Regional Technical College",
+    "achievements": [
+      {
+        "id": "ACH-008",
+        "title": "State Kho-Kho Winner",
+        "level": "STATE",
+        "is_verified": true,
+        "year": 2024,
+        "certificate_id": "CERT-STA-449"
+      }
+    ],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "High financial need but disqualified due to academic percentage under 60%."
+  },
+  {
+    "applicant_id": "APP-2026-008",
+    "full_name": "Harini Krishnan",
+    "email": "harini.k@example.edu",
+    "academic_percentage": 89.0,
+    "household_income": 850000.0,
+    "program_of_study": "B.Tech Artificial Intelligence",
+    "institution": "Apex Engineering Institute",
+    "achievements": [
+      {
+        "id": "ACH-009",
+        "title": "National App Innovation Winner",
+        "level": "NATIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-NAT-771"
+      }
+    ],
+    "gender": "Female",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "High academic score but disqualified due to household income exceeding 600,000."
+  },
+  {
+    "applicant_id": "APP-2026-009",
+    "full_name": "Ishan Sen",
+    "email": "ishan.sen@example.edu",
+    "academic_percentage": 52.0,
+    "household_income": 950000.0,
+    "program_of_study": "B.A. History",
+    "institution": "Metropolitan College",
+    "achievements": [],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "Disqualified on both academic threshold and income ceiling."
+  },
+  {
+    "applicant_id": "APP-2026-010",
+    "full_name": "Jaya Roy",
+    "email": "jaya.roy@example.edu",
+    "academic_percentage": null,
+    "household_income": 140000.0,
+    "program_of_study": "B.Sc Physics",
+    "institution": "Presidency College",
+    "achievements": [
+      {
+        "id": "ACH-010",
+        "title": "State Talent Search Scholar",
+        "level": "STATE",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-STA-101"
+      }
+    ],
+    "gender": "Female",
+    "category": "SC",
+    "religion": "Hindu",
+    "notes": "Needs Review: Academic transcript pending verification."
+  },
+  {
+    "applicant_id": "APP-2026-011",
+    "full_name": "Karan Malhotra",
+    "email": "karan.m@example.edu",
+    "academic_percentage": 88.0,
+    "household_income": null,
+    "program_of_study": "B.Tech Civil Engineering",
+    "institution": "Capital College of Engineering",
+    "achievements": [],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Sikh",
+    "notes": "Needs Review: Income tax certificate document missing."
+  },
+  {
+    "applicant_id": "APP-2026-012",
+    "full_name": "Lavanya Sundaram",
+    "email": "lavanya.s@example.edu",
+    "academic_percentage": 60.0,
+    "household_income": 150000.0,
+    "program_of_study": "B.Com Accounting",
+    "institution": "Loyola Arts & Commerce",
+    "achievements": [
+      {
+        "id": "ACH-011",
+        "title": "College Chess Champion",
+        "level": "INSTITUTIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-INS-001"
+      }
+    ],
+    "gender": "Female",
+    "category": "OBC",
+    "religion": "Hindu",
+    "notes": "Boundary test case: exactly 60.0% academic percentage and exactly 150,000 income."
+  },
+  {
+    "applicant_id": "APP-2026-013",
+    "full_name": "Manish Gupta",
+    "email": "manish.g@example.edu",
+    "academic_percentage": 76.0,
+    "household_income": 250000.0,
+    "program_of_study": "B.Sc Chemistry",
+    "institution": "St. Xavier College",
+    "achievements": [
+      {
+        "id": "ACH-012",
+        "title": "District Science Quiz First Place",
+        "level": "DISTRICT",
+        "is_verified": true,
+        "year": 2024,
+        "certificate_id": "CERT-DIS-552"
+      }
+    ],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "Boundary test case: exactly 250,000 income (Band B upper edge)."
+  },
+  {
+    "applicant_id": "APP-2026-014",
+    "full_name": "Neha Kulkarni",
+    "email": "neha.k@example.edu",
+    "academic_percentage": 81.0,
+    "household_income": 400000.0,
+    "program_of_study": "B.Tech Electronics",
+    "institution": "Pune Engineering College",
+    "achievements": [
+      {
+        "id": "ACH-013",
+        "title": "National Technical Paper Presentation",
+        "level": "NATIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-NAT-990"
+      }
+    ],
+    "gender": "Female",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "Boundary test case: exactly 400,000 income (Band C upper edge)."
+  },
+  {
+    "applicant_id": "APP-2026-015",
+    "full_name": "Omkar Deshmukh",
+    "email": "omkar.d@example.edu",
+    "academic_percentage": 71.0,
+    "household_income": 600000.0,
+    "program_of_study": "B.A. Economics",
+    "institution": "Symbiosis Arts",
+    "achievements": [
+      {
+        "id": "ACH-014",
+        "title": "Institutional Debate Best Speaker",
+        "level": "INSTITUTIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-INS-772"
+      }
+    ],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "Boundary test case: exactly 600,000 income (Band D upper edge and eligibility ceiling)."
+  },
+  {
+    "applicant_id": "APP-2026-016",
+    "full_name": "Pooja Hegde",
+    "email": "pooja.h@example.edu",
+    "academic_percentage": 95.0,
+    "household_income": 95000.0,
+    "program_of_study": "B.Tech Computer Engineering",
+    "institution": "Indian Institute of Information Technology",
+    "achievements": [
+      {
+        "id": "ACH-015",
+        "title": "International Coding Olympiad Gold",
+        "level": "INTERNATIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-INT-101"
+      },
+      {
+        "id": "ACH-016",
+        "title": "National Cyber Security Championship",
+        "level": "NATIONAL",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-NAT-303"
+      },
+      {
+        "id": "ACH-017",
+        "title": "State Hackathon Winner",
+        "level": "STATE",
+        "is_verified": true,
+        "year": 2024,
+        "certificate_id": "CERT-STA-505"
+      }
+    ],
+    "gender": "Female",
+    "category": "OBC",
+    "religion": "Hindu",
+    "notes": "Exceptional candidate: 15+10+6 = 31 pts raw achievement, capped at 25 pts."
+  },
+  {
+    "applicant_id": "APP-2026-017",
+    "full_name": "Rohit Nair",
+    "email": "rohit.nair@example.edu",
+    "academic_percentage": 79.0,
+    "household_income": 180000.0,
+    "program_of_study": "B.Tech Mechanical",
+    "institution": "Cochin Engineering University",
+    "achievements": [
+      {
+        "id": "ACH-018",
+        "title": "State Robotics Meet Winner",
+        "level": "STATE",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-STA-777"
+      },
+      {
+        "id": "ACH-019",
+        "title": "Duplicate State Robotics Certificate",
+        "level": "STATE",
+        "is_verified": true,
+        "year": 2025,
+        "certificate_id": "CERT-STA-777"
+      },
+      {
+        "id": "ACH-020",
+        "title": "Unverified Hackathon Participation",
+        "level": "NATIONAL",
+        "is_verified": false,
+        "year": 2025,
+        "certificate_id": "CERT-UNV-001"
+      }
+    ],
+    "gender": "Male",
+    "category": "General",
+    "religion": "Hindu",
+    "notes": "Tests deduplication and filtering of unverified claims."
+  }
+]
+

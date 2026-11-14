@@ -1,0 +1,25 @@
+# Environments and API credentials
+.env
+*.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+env/
+venv/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Audits / Logs
+execution_audit.jsonl
+test_audit.jsonl
+*.jsonl
+*.log
