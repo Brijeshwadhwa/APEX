@@ -124,7 +124,7 @@ The system integrates **Google Gemini** via the official `google-genai` SDK and 
 ### C. Security & Credential Protection
 * **Environment Variable:** Set your key in `Project/.env` as `GEMINI_API_KEY=your_key_here`.
 * **Zero Leakage:** `.env` is ignored via `.gitignore`. The application never logs, prints, or exposes the API key in terminal output, audit logs (`execution_audit.jsonl`), or UI widgets (masked as `AIza...****`).
-* **Model Configuration:** Configurable via `GEMINI_MODEL=gemini-2.5-flash` with automatic fallback to `gemini-2.0-flash` or `gemini-1.5-flash` if your tier lacks access.
+* **Model Configuration:** Configurable via `GEMINI_MODEL=gemini-3.5-flash` with automatic fallback to `gemini-3.5-flash-lite`, `gemini-2.5-pro`, or `gemini-3.8-flash` if your tier lacks access.
 
 ---
 
@@ -168,8 +168,8 @@ Copy-Item .env.example .env
 # Edit .env and set GEMINI_API_KEY=your_actual_key
 ```
 
-### Step 2: Run Full Automated Test Suite (55 Tests)
-Verify that all 55 unit, integration, and Gemini security tests pass:
+### Step 2: Run Full Automated Test Suite (65 Tests)
+Verify that all 65 unit, integration, coordinator gate, and Gemini security tests pass:
 ```powershell
 cd "C:\Users\Hp\Documents\7th SEM THINGS\AGENTIC_AI\CA2 - AGENT\Project"
 .\.venv\Scripts\pytest.exe -v

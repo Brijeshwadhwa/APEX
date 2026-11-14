@@ -197,24 +197,33 @@ def render_new_application_page(coordinator, store, logger, all_states, on_evalu
 
         d_c1, d_c2, d_c3 = st.columns(3)
         with d_c1:
-            gender = st.selectbox("Gender (Audit Tracked)", ["Female", "Male", "Non-Binary", "Prefer not to disclose"])
+            gender = st.selectbox("Gender (Audit Tracked - Optional)", ["", "Female", "Male", "Non-Binary", "Prefer not to disclose"], index=0)
         with d_c2:
-            category = st.selectbox("Category (Audit Tracked)", ["General", "OBC", "SC", "ST", "EWS", "Minority"])
+            category = st.selectbox("Category (Audit Tracked - Optional)", ["", "General", "OBC", "SC", "ST", "EWS", "Minority"], index=0)
         with d_c3:
-            religion = st.text_input("Religion (Audit Tracked)", value="Hindu")
+            religion = st.text_input("Religion (Audit Tracked - Optional)", value="", placeholder="Leave blank or specify")
 
-        st.caption("🔒 **Clause 4.1 Compliance:** Demographic fields are strictly isolated for non-discrimination fairness audits and never factored into scoring algorithms.")
+        st.info("""
+        🔒 **Privacy Notice & AI Processing Disclosure (Clause 4.1):**
+        - **Deterministic Scoring:** Demographic fields are entirely optional and strictly excluded from scoring algorithms and eligibility cutoffs.
+        - **Local Processing:** Dossier validation, eligibility verification, and numerical scoring execute locally via Microsoft Semantic Kernel.
+        - **AI Advisory Boundary:** If committee analysis or report generation is requested, minimal sanitized profile data is transmitted to Google Gemini. Gemini output is strictly advisory and cannot alter deterministic scores, eligibility decisions, or leaderboard rankings.
+        """)
 
         eval_immediately = st.checkbox("⚡ Immediately execute 7-agent evaluation pipeline upon submission", value=True)
 
-        submitted = st.form_submit_button("📥 Submit & Adjudicate Dossier", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("📥 Submit & Adjudicate Dossier", type="primary", width="stretch")
 
     if submitted:
-        if not app_id.strip():
+        clean_app_id = app_id.strip()
+        if not clean_app_id:
             st.error("Applicant ID is required.")
             return
         if not full_name.strip():
             st.error("Full Legal Name is required.")
+            return
+        if store.is_applicant_registered(clean_app_id):
+            st.error(f"Duplicate Submission Blocked: Applicant ID '{clean_app_id}' is already registered in the state store.")
             return
 
         achievements_list = []
@@ -237,8 +246,8 @@ def render_new_application_page(coordinator, store, logger, all_states, on_evalu
             "program_of_study": program.strip() if program.strip() else None,
             "institution": institution.strip() if institution.strip() else None,
             "achievements": achievements_list,
-            "gender": gender,
-            "category": category,
+            "gender": gender.strip() if gender.strip() else None,
+            "category": category.strip() if category.strip() else None,
             "religion": religion.strip() if religion.strip() else None,
             "notes": "Dossier submitted via web intake portal.",
         }

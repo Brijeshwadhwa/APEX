@@ -150,13 +150,29 @@ class EvaluationState(BaseModel):
 
 
 class StateStore:
-    """Thread-safe and asyncio-safe repository for managing isolated applicant evaluation states."""
+    """Thread-safe, asyncio-safe, and disk-persisted repository for managing isolated applicant evaluation states."""
 
-    def __init__(self) -> None:
+    def __init__(self, persistence_file_path: Optional[str] = None) -> None:
         self._states: Dict[str, EvaluationState] = {}
         self._lock: Optional[asyncio.Lock] = None
         self._lock_loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread_lock = threading.Lock()
+        self.persistence_file_path = os.path.abspath(persistence_file_path) if persistence_file_path else None
+
+        if self.persistence_file_path and os.path.exists(self.persistence_file_path):
+            try:
+                self.load_from_json(self.persistence_file_path)
+            except Exception:
+                # Safe recovery on corrupt or partial file
+                pass
+
+    def _auto_save_to_disk(self) -> None:
+        """Internal helper to automatically sync memory states to JSON disk storage."""
+        if self.persistence_file_path:
+            try:
+                self.save_to_json(self.persistence_file_path)
+            except Exception:
+                pass
 
     def _get_lock(self) -> asyncio.Lock:
         """Lazily initialize asyncio.Lock inside active event loop, rebinding if loop changes."""
@@ -169,6 +185,11 @@ class StateStore:
             self._lock_loop = current_loop
         return self._lock
 
+    def is_applicant_registered(self, applicant_id: str) -> bool:
+        """Check whether an applicant ID already exists in the store to prevent duplicate submissions."""
+        with self._thread_lock:
+            return applicant_id in self._states
+
     async def get_state(self, applicant_id: str) -> Optional[EvaluationState]:
         """Retrieve a deep-copied evaluation state for a given applicant ID."""
         async with self._get_lock():
@@ -178,16 +199,17 @@ class StateStore:
             return copy.deepcopy(state)
 
     async def save_state(self, state: EvaluationState) -> None:
-        """Store a deep-copied evaluation state isolated by applicant ID."""
+        """Store a deep-copied evaluation state isolated by applicant ID and persist to disk."""
         async with self._get_lock():
             cloned = copy.deepcopy(state)
             cloned.updated_at = _utc_now_iso()
             self._states[cloned.applicant_id] = cloned
+        self._auto_save_to_disk()
 
     async def update_state(
         self, applicant_id: str, updater: Callable[[EvaluationState], None]
     ) -> EvaluationState:
-        """Safely mutate an applicant state under the store lock with deep-copy isolation."""
+        """Safely mutate an applicant state under the store lock with deep-copy isolation and persist."""
         async with self._get_lock():
             if applicant_id not in self._states:
                 raise KeyError(f"Applicant ID '{applicant_id}' not found in state store.")
@@ -195,7 +217,9 @@ class StateStore:
             updater(current_state)
             current_state.updated_at = _utc_now_iso()
             self._states[applicant_id] = copy.deepcopy(current_state)
-            return copy.deepcopy(current_state)
+            cloned_result = copy.deepcopy(current_state)
+        self._auto_save_to_disk()
+        return cloned_result
 
     async def list_all(self) -> List[EvaluationState]:
         """Return deep-copied list of all currently tracked applicant states."""
@@ -209,39 +233,50 @@ class StateStore:
                 raise KeyError(f"Applicant ID '{applicant_id}' not found in state store.")
             state = self._states[applicant_id]
             snap = state.take_snapshot(label)
-            return copy.deepcopy(snap)
+            cloned_snap = copy.deepcopy(snap)
+        self._auto_save_to_disk()
+        return cloned_snap
 
     async def clear(self) -> None:
-        """Clear all applicant states in the store."""
+        """Clear all applicant states in the store and update disk storage."""
         async with self._get_lock():
             self._states.clear()
+        self._auto_save_to_disk()
 
     def save_to_json(self, file_path: str) -> None:
         """Synchronously persist all stored evaluation states to a JSON file."""
-        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
-        data = {
-            "rubric_version": RUBRIC_VERSION,
-            "config_hash": get_configuration_hash(),
-            "exported_at": _utc_now_iso(),
-            "applicants": {
-                app_id: json.loads(state.model_dump_json())
-                for app_id, state in self._states.items()
-            },
-        }
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        with self._thread_lock:
+            target_path = os.path.abspath(file_path)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            data = {
+                "rubric_version": RUBRIC_VERSION,
+                "config_hash": get_configuration_hash(),
+                "exported_at": _utc_now_iso(),
+                "applicants": {
+                    app_id: json.loads(state.model_dump_json())
+                    for app_id, state in self._states.items()
+                },
+            }
+            with open(target_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
 
     def load_from_json(self, file_path: str) -> None:
-        """Load evaluation states from a JSON file."""
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"State file '{file_path}' does not exist.")
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        """Load evaluation states from a JSON file with resilient corruption handling."""
+        target_path = os.path.abspath(file_path)
+        if not os.path.exists(target_path):
+            raise FileNotFoundError(f"State file '{target_path}' does not exist.")
+        with self._thread_lock:
+            with open(target_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
-        applicants = data.get("applicants", {})
-        loaded_states: Dict[str, EvaluationState] = {}
-        for app_id, state_dict in applicants.items():
-            loaded_states[app_id] = EvaluationState.model_validate(state_dict)
+            applicants = data.get("applicants", {})
+            loaded_states: Dict[str, EvaluationState] = {}
+            for app_id, state_dict in applicants.items():
+                try:
+                    loaded_states[app_id] = EvaluationState.model_validate(state_dict)
+                except Exception:
+                    # Safely skip unparseable records to prevent whole application crash
+                    continue
 
-        self._states = loaded_states
+            self._states = loaded_states
 

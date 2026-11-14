@@ -52,12 +52,57 @@ class ScholarshipCoordinator:
         state = await self.eligibility_agent.evaluate_applicant(state)
         await self.store.save_state(state)
 
-        # Step 3: Fan-Out to Specialist Evaluation Agents in parallel
+        # Gate Check: Enforce hard cutoffs before specialist fan-out
+        if state.status == "INELIGIBLE":
+            failed = state.eligibility.failed_rules if state.eligibility else []
+            state.record_trace(
+                sender="Coordinator",
+                receiver="SpecialistAgents",
+                event_type="SPECIALIST_SCORING_SKIPPED",
+                payload_summary=f"Applicant is INELIGIBLE ({'; '.join(failed)}). Specialist scoring agents (Merit, Financial, Achievement) skipped per Clause 1.1/1.2.",
+            )
+            state.take_snapshot("Evaluation Terminated: Ineligible Disqualified")
+            await self.store.save_state(state)
+            duration = time.perf_counter() - start_time
+            self.logger.log_sync(
+                applicant_id=app_id,
+                agent_name="Coordinator",
+                tool_name="eligibility_gate_stop",
+                input_summary=f"Hard eligibility cutoff stopped evaluation for {app_id}",
+                output_summary=f"Status: INELIGIBLE, Failed Rules: {failed}",
+                execution_status="SUCCESS",
+                duration=duration,
+            )
+            return state
+
+        if state.status == "NEEDS_REVIEW":
+            missing = state.eligibility.missing_fields if state.eligibility else []
+            state.record_trace(
+                sender="Coordinator",
+                receiver="SpecialistAgents",
+                event_type="SPECIALIST_SCORING_SKIPPED",
+                payload_summary=f"Applicant requires manual review (NEEDS_REVIEW) due to missing mandatory data: {missing}. Specialist scoring skipped per Clause 1.3.",
+            )
+            state.take_snapshot("Evaluation Terminated: Incomplete Needs Review")
+            await self.store.save_state(state)
+            duration = time.perf_counter() - start_time
+            self.logger.log_sync(
+                applicant_id=app_id,
+                agent_name="Coordinator",
+                tool_name="eligibility_gate_hold",
+                input_summary=f"Missing documentation stopped automatic evaluation for {app_id}",
+                output_summary=f"Status: NEEDS_REVIEW, Missing Fields: {missing}",
+                execution_status="SUCCESS",
+                duration=duration,
+            )
+            return state
+
+        # Step 3: Fan-Out to Specialist Evaluation Agents in parallel (ONLY FOR ELIGIBLE CANDIDATES)
         state.record_trace(
             sender="Coordinator",
             receiver="SpecialistAgents",
             event_type="FAN_OUT_DISPATCH",
-            payload_summary="Fanning out applicant profile to Merit, Financial Need, and Achievement agents.",
+            payload_summary="Fanning out eligible applicant profile to Merit, Financial Need, and Achievement agents.",
         )
 
         merit_task = self.merit_agent.evaluate_applicant(state)
@@ -85,8 +130,21 @@ class ScholarshipCoordinator:
         state = await self.panel_manager.adjudicate_applicant(state)
         await self.store.save_state(state)
 
-        # Step 5: Fairness Auditor (Ethical review and calculation verification)
+        # Step 5: Fairness Auditor (Ethical review, bias check, score consistency, and limit verification)
         state = await self.fairness_auditor.audit_applicant(state)
+
+        # Enforcement: A failed fairness audit prevents confirmed ranking until human review
+        if state.audit_result and not state.audit_result.passed:
+            state.status = "FLAGGED_FAIRNESS"
+            state.recommendation = "Under Review - Fairness Audit Flagged"
+            state.record_trace(
+                sender="Coordinator",
+                receiver="EvaluationState",
+                event_type="FAIRNESS_AUDIT_INTERVENTION",
+                payload_summary=f"Fairness audit failed ({state.audit_result.audit_notes}). Confirmed ranking blocked pending human review.",
+            )
+            state.take_snapshot("Status Overridden: Fairness Audit Failed")
+
         await self.store.save_state(state)
 
         duration = time.perf_counter() - start_time
@@ -109,11 +167,15 @@ class ScholarshipCoordinator:
         return results
 
     async def get_ranked_leaderboard(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Categorizes and sorts all evaluated applicants into formal committee pools."""
+        """Categorizes and sorts all evaluated applicants into formal committee pools with deterministic tie-breaking."""
         all_states = await self.store.list_all()
 
         confirmed_awardees: List[Dict[str, Any]] = []
+        high_priority_pool: List[Dict[str, Any]] = []
+        recommended_pool: List[Dict[str, Any]] = []
         consider_waitlist: List[Dict[str, Any]] = []
+        low_priority_pool: List[Dict[str, Any]] = []
+        fairness_quarantine_pool: List[Dict[str, Any]] = []
         ineligible_pool: List[Dict[str, Any]] = []
         needs_review_pool: List[Dict[str, Any]] = []
 
@@ -130,26 +192,77 @@ class ScholarshipCoordinator:
                 "recommendation": st.recommendation,
                 "status": st.status,
                 "audit_passed": st.audit_result.passed if st.audit_result else None,
+                "audit_notes": st.audit_result.audit_notes if st.audit_result else None,
             }
 
+            # 1. Ineligible / Disqualified: strictly barred from awards
             if st.status == "INELIGIBLE":
                 summary["disqualification_reasons"] = st.eligibility.failed_rules if st.eligibility else []
                 ineligible_pool.append(summary)
+
+            # 2. Incomplete / Needs Review: pending documentation
             elif st.status == "NEEDS_REVIEW":
                 summary["missing_fields"] = st.eligibility.missing_fields if st.eligibility else []
                 needs_review_pool.append(summary)
-            elif st.recommendation in ("High Priority", "Recommended"):
+
+            # 3. Quarantined due to Failed Fairness / Consistency Audit
+            elif st.status == "FLAGGED_FAIRNESS" or (st.audit_result and not st.audit_result.passed):
+                summary["quarantine_reason"] = st.audit_result.audit_notes if st.audit_result else "Fairness or calculation consistency check failed"
+                fairness_quarantine_pool.append(summary)
+
+            # 4. Confirmed Awardees: High Priority
+            elif st.recommendation == "High Priority":
+                high_priority_pool.append(summary)
                 confirmed_awardees.append(summary)
-            else:
+
+            # 5. Confirmed Awardees: Recommended
+            elif st.recommendation == "Recommended":
+                recommended_pool.append(summary)
+                confirmed_awardees.append(summary)
+
+            # 6. Consider / Secondary Allocation Waitlist (50.0 - 64.9)
+            elif st.recommendation == "Consider":
                 consider_waitlist.append(summary)
 
-        # Sort confirmed pools by descending total score
-        confirmed_awardees.sort(key=lambda x: x["total_score"] or 0, reverse=True)
-        consider_waitlist.sort(key=lambda x: x["total_score"] or 0, reverse=True)
+            # 7. Low Priority / Non-Competitive (< 50.0) - kept in waitlist pool & tracked in low_priority_pool
+            elif st.recommendation == "Low Priority":
+                low_priority_pool.append(summary)
+                consider_waitlist.append(summary)
+
+            else:
+                # Pending evaluation or unclassified
+                needs_review_pool.append(summary)
+
+        # Deterministic multi-tier tie-breaking:
+        # 1. Total score (descending)
+        # 2. Academic percentage (descending)
+        # 3. Household income (ascending — lower income receives priority)
+        # 4. Achievement score (descending)
+        # 5. Applicant ID (lexicographical ascending for stable deterministic sorting)
+        def _tie_break_key(x: Dict[str, Any]):
+            tot = x.get("total_score") if x.get("total_score") is not None else -1.0
+            acad = x.get("academic_percentage") if x.get("academic_percentage") is not None else -1.0
+            inc = x.get("household_income") if x.get("household_income") is not None else 999999999.0
+            ach = x.get("achievement_score") if x.get("achievement_score") is not None else -1.0
+            app_id = x.get("applicant_id") or ""
+            # Reverse-sort helper: we want tot desc, acad desc, inc ASC, ach desc, app_id ASC
+            # In Python, we can sort ascending by (-tot, -acad, inc, -ach, app_id)
+            return (-tot, -acad, inc, -ach, app_id)
+
+        confirmed_awardees.sort(key=_tie_break_key)
+        high_priority_pool.sort(key=_tie_break_key)
+        recommended_pool.sort(key=_tie_break_key)
+        consider_waitlist.sort(key=_tie_break_key)
+        low_priority_pool.sort(key=_tie_break_key)
+        fairness_quarantine_pool.sort(key=_tie_break_key)
 
         return {
             "confirmed_awardees": confirmed_awardees,
+            "high_priority_pool": high_priority_pool,
+            "recommended_pool": recommended_pool,
             "consider_waitlist": consider_waitlist,
+            "low_priority_pool": low_priority_pool,
+            "fairness_quarantine_pool": fairness_quarantine_pool,
             "ineligible_disqualified": ineligible_pool,
             "needs_review": needs_review_pool,
         }

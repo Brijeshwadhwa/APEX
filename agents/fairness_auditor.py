@@ -33,21 +33,34 @@ class FairnessAuditPlugin:
         combined_text = " ".join(texts).lower()
 
         flagged_attributes = []
+        bias_patterns = [
+            "due to {attr}", "because of {attr}", "penalty for {attr}",
+            "based on {attr}", "bonus for {attr}", "weighted by {attr}",
+            "applicant's {attr}", "candidate's {attr}", "{attr} factor",
+            "{attr} preference", "considering {attr}", "favoring {attr}",
+            "discounting {attr}", "adjusted for {attr}", "points for {attr}",
+            "{attr}: female", "{attr}: male", "{attr}: hindu", "{attr}: muslim",
+            "{attr}: christian", "{attr}: sikh", "caste factor", "caste penalty"
+        ]
+
         for attr in PROHIBITED_SCORING_ATTRIBUTES:
-            # Check for direct mentions in rationale
-            if f"due to {attr}" in combined_text or f"because of {attr}" in combined_text or f"penalty for {attr}" in combined_text:
-                flagged_attributes.append(attr)
+            for pat in bias_patterns:
+                check_str = pat.format(attr=attr)
+                if check_str in combined_text and attr not in flagged_attributes:
+                    flagged_attributes.append(attr)
 
         bias_detected = len(flagged_attributes) > 0
+        evidence_verified = not bias_detected
         notes = (
-            f"BIAS DETECTED: Disallowed attribute(s) {flagged_attributes} referenced in score rationales."
+            f"BIAS DETECTED: Disallowed demographic attribute(s) {flagged_attributes} referenced in evaluation rationales. Violates Clause 4.1."
             if bias_detected
-            else "Bias Audit Passed: Evaluation strictly blind to prohibited demographic attributes."
+            else "Bias Audit Passed: Evaluation strictly blind to prohibited demographic attributes (Clause 4.1 compliant)."
         )
 
         return json.dumps({
             "bias_detected": bias_detected,
             "flagged_attributes": flagged_attributes,
+            "evidence_verified": evidence_verified,
             "notes": notes,
         })
 
@@ -64,11 +77,12 @@ class FairnessAuditPlugin:
         total_score_str: str,
         recommendation: str,
     ) -> str:
-        """Plain Python tool to verify mathematical summation and recommendation consistency."""
+        """Plain Python tool to verify mathematical summation, component maximums, and recommendation consistency."""
         if total_score_str == "None":
             # Ineligible or incomplete candidates have None total score
             return json.dumps({
                 "math_consistent": True,
+                "limits_consistent": True,
                 "notes": "Verified exclusion consistency: non-eligible applicant has no confirmed total score.",
             })
 
@@ -77,21 +91,45 @@ class FairnessAuditPlugin:
         ach = Decimal(achievement_score_str)
         reported_total = Decimal(total_score_str)
 
+        # 1. Verify component score maximums per Clause 2.1, 2.2, 2.3
+        acad_ok = Decimal("0.0") <= acad <= Decimal("40.0")
+        fin_ok = Decimal("0.0") <= fin <= Decimal("35.0")
+        ach_ok = Decimal("0.0") <= ach <= Decimal("25.0")
+        tot_ok = Decimal("0.0") <= reported_total <= Decimal("100.0")
+        limits_ok = acad_ok and fin_ok and ach_ok and tot_ok
+
+        limit_violations = []
+        if not acad_ok:
+            limit_violations.append(f"Academic score {acad} exceeds permitted ceiling [0, 40.0]")
+        if not fin_ok:
+            limit_violations.append(f"Financial score {fin} exceeds permitted ceiling [0, 35.0]")
+        if not ach_ok:
+            limit_violations.append(f"Achievement score {ach} exceeds permitted ceiling [0, 25.0]")
+        if not tot_ok:
+            limit_violations.append(f"Total score {reported_total} exceeds permitted ceiling [0, 100.0]")
+
+        # 2. Verify mathematical summation consistency
         computed_sum = acad + fin + ach
         sum_matches = computed_sum == reported_total
         expected_rec = resolve_recommendation(computed_sum)
         rec_matches = expected_rec == recommendation
 
-        consistent = sum_matches and rec_matches
-        notes = (
-            f"Mathematical check verified: {acad} + {fin} + {ach} = {computed_sum} exactly matches total {reported_total}. Threshold category '{recommendation}' confirmed."
-            if consistent
-            else f"MATHEMATICAL DISCREPANCY: Sum is {computed_sum} vs reported {reported_total}, or rec '{recommendation}' != expected '{expected_rec}'."
-        )
+        consistent = sum_matches and rec_matches and limits_ok
+        notes_parts = []
+        if not limits_ok:
+            notes_parts.append(f"SCORE MAXIMUM VIOLATION: {'; '.join(limit_violations)}")
+        if not sum_matches:
+            notes_parts.append(f"MATHEMATICAL SUM DISCREPANCY: {acad} + {fin} + {ach} = {computed_sum} != reported {reported_total}")
+        if not rec_matches:
+            notes_parts.append(f"RECOMMENDATION MISMATCH: Reported '{recommendation}' != expected '{expected_rec}'")
+        if consistent:
+            notes_parts.append(f"Mathematical check verified: {acad} + {fin} + {ach} = {computed_sum} matches {reported_total}. All component limits respected. Threshold category '{recommendation}' confirmed.")
 
         return json.dumps({
-            "math_consistent": consistent,
-            "notes": notes,
+            "math_consistent": sum_matches and rec_matches,
+            "limits_consistent": limits_ok,
+            "consistent": consistent,
+            "notes": " | ".join(notes_parts),
         })
 
 
@@ -170,15 +208,24 @@ class FairnessAuditorAgent:
             duration=time.perf_counter() - t2_start,
         )
 
-        passed = (not bias_data["bias_detected"]) and math_data["math_consistent"]
+        limits_consistent = math_data.get("limits_consistent", True)
+        math_consistent = math_data.get("math_consistent", True)
+        evidence_verified = bias_data.get("evidence_verified", True)
+        bias_detected = bias_data.get("bias_detected", False)
+
+        passed = (not bias_detected) and math_consistent and limits_consistent and evidence_verified
+        audit_status = "PASS" if passed else "FAIL"
         combined_notes = f"{bias_data['notes']} | {math_data['notes']}"
 
         audit_result = AuditResult(
             applicant_id=app_id,
             passed=passed,
-            bias_detected=bias_data["bias_detected"],
+            audit_status=audit_status,
+            bias_detected=bias_detected,
             flagged_attributes=bias_data["flagged_attributes"],
-            score_consistency_verified=math_data["math_consistent"],
+            score_consistency_verified=math_consistent,
+            component_limits_verified=limits_consistent,
+            evidence_based_verified=evidence_verified,
             audit_notes=combined_notes,
         )
 

@@ -66,7 +66,7 @@ class GeminiService:
             self.api_key = api_key.strip()
         else:
             self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+        self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip()
         self.temperature = float(os.getenv("GEMINI_TEMPERATURE", str(temperature)))
         self.max_output_tokens = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", str(max_output_tokens)))
 
@@ -113,7 +113,7 @@ class GeminiService:
         if not force_refresh and self._connection_verified is not None:
             return self._connection_verified, self._connection_status_message
 
-        candidate_models = [self.model_name, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
+        candidate_models = [self.model_name, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-pro", "gemini-3.8-flash"]
         # Deduplicate while preserving order
         candidate_models = list(dict.fromkeys(candidate_models))
 
@@ -478,10 +478,16 @@ Status verdict is **{state.status}** with allocation category **{state.recommend
 
         # 1. Retrieve governing passages from deterministic retriever
         passages = retriever.retrieve_relevant_clauses(clean_q, top_k=top_k)
+        valid_clause_ids = {c.clause_id for c in passages}
+        passages_data = [
+            {"clause_id": c.clause_id, "title": c.title, "section": c.section, "text": c.text}
+            for c in passages
+        ]
+        source_doc = os.path.basename(getattr(retriever, "rubric_file_path", "scholarship_rubric.md"))
 
         if not self.is_configured:
             # Deterministic retriever fallback
-            return self._fallback_rag(clean_q, passages, "Gemini API key is not configured.")
+            return self._fallback_rag(clean_q, passages, "Gemini API key is not configured.", source_doc)
 
         # Build context block
         if not passages:
@@ -489,6 +495,9 @@ Status verdict is **{state.status}** with allocation category **{state.recommend
                 question=clean_q,
                 answer="The available scholarship rubric does not establish this rule or criterion. No relevant clauses were found matching your inquiry.",
                 cited_clauses=[],
+                rejected_citations=[],
+                retrieved_passages=[],
+                source_document=source_doc,
                 is_grounded=True,
                 rubric_coverage_status="NOT_ESTABLISHED_IN_RUBRIC",
             )
@@ -508,9 +517,9 @@ USER QUESTION:
 
 CRITICAL RULES:
 1. Ground your answer strictly and exclusively in the provided rubric clauses.
-2. Cite the exact clause identifiers in your response (e.g. Clause 1.1, Clause 2.2).
+2. Cite ONLY exact clause identifiers from the provided list: {list(valid_clause_ids)}. Do NOT invent or cite any clause not in this list.
 3. Do NOT extrapolate, speculate, or invent policy rules not stated in the text.
-4. If the provided clauses do NOT contain the answer, you MUST state: "The available scholarship rubric does not establish this rule or criterion."
+4. If the provided clauses do NOT contain the answer, you MUST state: "The available scholarship rubric does not establish this rule or criterion." and set "is_covered": false.
 
 Provide response in JSON:
 {{
@@ -538,14 +547,29 @@ Return ONLY JSON without markdown fences."""
 
             is_covered = data.get("is_covered", True)
             ans = data.get("answer", "")
-            if "does not establish" in ans.lower():
+            raw_cited = data.get("cited_clauses", [])
+
+            # Validate returned citations strictly against retrieved passage identifiers
+            valid_citations = [c for c in raw_cited if c in valid_clause_ids]
+            rejected_citations = [c for c in raw_cited if c not in valid_clause_ids]
+
+            # If model returned no citations or says unestablished, mark accordingly
+            if "does not establish" in ans.lower() or not valid_citations:
                 is_covered = False
+                if not valid_citations and "does not establish" not in ans.lower():
+                    ans = "The available scholarship rubric does not establish this rule or criterion. No verified rubric clauses substantiate this inquiry."
+
+            # Grounding requires valid citations and no fabricated citations
+            is_grounded = bool(valid_citations and is_covered and len(rejected_citations) == 0)
 
             res = GeminiRAGResult(
                 question=clean_q,
                 answer=ans,
-                cited_clauses=data.get("cited_clauses", [c.clause_id for c in passages]),
-                is_grounded=True,
+                cited_clauses=valid_citations,
+                rejected_citations=rejected_citations,
+                retrieved_passages=passages_data,
+                source_document=source_doc,
+                is_grounded=is_grounded,
                 rubric_coverage_status="COVERED_IN_RUBRIC" if is_covered else "NOT_ESTABLISHED_IN_RUBRIC",
             )
             self._rag_cache[cache_key] = res
@@ -553,21 +577,39 @@ Return ONLY JSON without markdown fences."""
 
         except Exception as e:
             logger.warning(f"Gemini RAG call failed: {type(e).__name__} - {e}")
-            return self._fallback_rag(clean_q, passages, f"Gemini error: {type(e).__name__}")
+            return self._fallback_rag(clean_q, passages, f"Gemini error: {type(e).__name__}", source_doc)
 
-    def _fallback_rag(self, question: str, passages: list, note: str) -> GeminiRAGResult:
+    def _fallback_rag(self, question: str, passages: list, note: str, source_doc: str = "scholarship_rubric.md") -> GeminiRAGResult:
         """Deterministic RAG fallback synthesizing direct citations from passages."""
         if not passages:
             return GeminiRAGResult(
                 question=question,
                 answer="The available scholarship rubric does not establish this rule or criterion.",
                 cited_clauses=[],
+                rejected_citations=[],
+                retrieved_passages=[],
+                source_document=source_doc,
                 is_grounded=True,
                 rubric_coverage_status="NOT_ESTABLISHED_IN_RUBRIC",
             )
 
         citations = [p.clause_id for p in passages]
+        passages_data = [
+            {"clause_id": p.clause_id, "title": p.title, "section": p.section, "text": p.text}
+            for p in passages
+        ]
         summary_points = [f"Per **{p.clause_id} ({p.title})**: {p.text}" for p in passages]
+        ans = f"Deterministic Rubric Retrieval ({note}):\n\n" + "\n\n".join(summary_points)
+        return GeminiRAGResult(
+            question=question,
+            answer=ans,
+            cited_clauses=citations,
+            rejected_citations=[],
+            retrieved_passages=passages_data,
+            source_document=source_doc,
+            is_grounded=True,
+            rubric_coverage_status="COVERED_IN_RUBRIC",
+        )
         answer = " ".join(summary_points)
 
         return GeminiRAGResult(

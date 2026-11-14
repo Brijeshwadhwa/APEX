@@ -215,6 +215,69 @@ def test_rag_unsupported_question_handling(real_retriever):
     assert res.rubric_coverage_status in ["NOT_ESTABLISHED_IN_RUBRIC", "COVERED_IN_RUBRIC"]
 
 
+def test_rag_rejects_fabricated_citations(real_retriever):
+    """Proves that fabricated citations produced by LLM are strictly rejected and flagged."""
+    service = GeminiService(api_key="dummy_key")
+
+    mock_json = {
+        "answer": "Qualifying threshold is 60.0% per Clause 1.1.",
+        "cited_clauses": ["Clause 1.1", "Clause 99.99_FABRICATED_ID"],
+        "is_covered": True,
+    }
+    mock_resp = MagicMock()
+    mock_resp.text = json.dumps(mock_json)
+
+    with patch.object(service._client.models, "generate_content", return_value=mock_resp):
+        res = service.answer_rubric_question(
+            question="What is the academic threshold?",
+            retriever=real_retriever,
+            top_k=2,
+        )
+
+        # Clause 1.1 is valid and kept; Clause 99.99_FABRICATED_ID is rejected
+        assert "Clause 1.1" in res.cited_clauses
+        assert "Clause 99.99_FABRICATED_ID" not in res.cited_clauses
+        assert "Clause 99.99_FABRICATED_ID" in res.rejected_citations
+        # Fabricated citation presence must invalidate is_grounded flag
+        assert res.is_grounded is False
+
+
+def test_rag_empty_retrieval_returns_unestablished():
+    """Proves that when no passages are retrieved, answer states rule is unestablished."""
+    service = GeminiService(api_key="dummy_key")
+    mock_retriever = MagicMock()
+    mock_retriever.retrieve_relevant_clauses.return_value = []
+
+    res = service.answer_rubric_question(
+        question="Unmatched query",
+        retriever=mock_retriever,
+        top_k=2,
+    )
+
+    assert res.rubric_coverage_status == "NOT_ESTABLISHED_IN_RUBRIC"
+    assert "does not establish" in res.answer.lower()
+    assert res.cited_clauses == []
+    assert res.retrieved_passages == []
+
+
+def test_rag_invalid_json_model_output_fallback(real_retriever):
+    """Proves that if model returns broken non-JSON text, service falls back to deterministic RAG."""
+    service = GeminiService(api_key="dummy_key")
+    mock_resp = MagicMock()
+    mock_resp.text = "NOT JSON OUTPUT <broken>"
+
+    with patch.object(service._client.models, "generate_content", return_value=mock_resp):
+        res = service.answer_rubric_question(
+            question="academic percentage",
+            retriever=real_retriever,
+            top_k=2,
+        )
+
+        assert res is not None
+        assert res.rubric_coverage_status == "COVERED_IN_RUBRIC"
+        assert len(res.cited_clauses) > 0
+
+
 # =============================================================================
 # 6. CRITICAL: DETERMINISTIC SCORING IMMUTABILITY & ISOLATION
 # =============================================================================

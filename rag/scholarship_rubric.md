@@ -1,7 +1,8 @@
-# OFFICIAL UNIVERSITY SCHOLARSHIP AND MERIT GRANT RUBRIC
-Document Version: 1.0.0
-Authorizing Body: University Central Scholarship Committee
-Academic Cycle: 2026-2027
+# CSE476 DEMONSTRATION SCHOLARSHIP AND MERIT GRANT EVALUATION RUBRIC
+Document Version: 1.0.0 (Course Project Demonstration Specification)
+Project: CSE476 Agentic AI & Intelligent Automation — CA2 (Grant & Scholarship Application Evaluator)
+Provenance: Coursework Demonstration Specification (Synthetic Institutional Scenario)
+Notice: This document is an illustrative, project-created demonstration rubric developed specifically for academic coursework and multi-agent system demonstration. It does not represent an official university policy, statutory regulation, or governmental authority. All thresholds, scoring curves, and criteria are illustrative parameters designed to evaluate agent orchestration, RAG retrieval, and policy compliance.
 
 ---
 
@@ -58,6 +59,16 @@ Following aggregation of the three specialist scores, candidates are assigned a 
 
 ### Clause 3.2: Exclusion of Disqualified and Pending Records
 Applicants designated as "INELIGIBLE" or "NEEDS_REVIEW" are strictly barred from appearing on the confirmed scholarship award roster.
+
+### Clause 3.3: Deterministic Ranking and Tie-Breaking Rules
+Eligible candidates who successfully pass the automated fairness audit are ranked on the confirmed award roster using a strict multi-tier deterministic tie-breaking policy:
+1. Primary Criterion: Total Composite Score out of 100.0 (descending order).
+2. First Tie-Breaker: Qualifying Academic Percentage (descending order).
+3. Second Tie-Breaker: Gross Annual Household Income (ascending order — lower household income receives priority for financial assistance).
+4. Third Tie-Breaker: Cumulative Verified Achievement Score out of 25.0 (descending order).
+5. Final Arbiter: Applicant ID (lexicographical ascending order to guarantee stable, reproducible rankings).
+
+Candidates who fail the automated fairness audit or display mathematical calculation discrepancies are quarantined from the confirmed award roster pending manual human committee review.
 
 ---
 

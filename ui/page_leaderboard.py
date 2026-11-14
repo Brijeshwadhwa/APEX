@@ -18,6 +18,8 @@ def render_leaderboard_page(coordinator, store, logger, all_states, leaderboard)
     waitlist = leaderboard["consider_waitlist"]
     ineligible = leaderboard["ineligible_disqualified"]
     needs_review = leaderboard["needs_review"]
+    quarantined = leaderboard.get("fairness_quarantine_pool", [])
+    low_priority = leaderboard.get("low_priority_pool", [])
 
     # --- TOP 4 METRIC CARDS ---
     m1, m2, m3, m4 = st.columns(4)
@@ -26,11 +28,31 @@ def render_leaderboard_page(coordinator, store, logger, all_states, leaderboard)
     with m2:
         render_stat_card("Waitlist Pool", str(len(waitlist)), "Consider Tiers (50 - 64.9)", "⏳", "#2563EB")
     with m3:
-        render_stat_card("Disqualified", str(len(ineligible)), "Zero Award Slots (Barred)", "⛔", "#DC2626")
+        q_color = "#DC2626" if quarantined else "#64748B"
+        render_stat_card("Fairness Quarantined", str(len(quarantined)), "Audit Holds (Barred)", "🛡️", q_color)
     with m4:
-        render_stat_card("Needs Review", str(len(needs_review)), "Pending Documentation", "⚠️", "#D97706")
+        render_stat_card("Disqualified & Hold", str(len(ineligible) + len(needs_review)), f"Barred: {len(ineligible)} | Review: {len(needs_review)}", "⛔", "#D97706")
 
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # --- FAIRNESS QUARANTINE SECTION (IF ANY CANDIDATES FLAGGED) ---
+    if quarantined:
+        st.error("""
+        ⚠️ **Fairness & Consistency Audit Quarantined Pool (Clause 4.1 / 4.2 Violation):**
+        The following candidates were flagged during automated fairness auditing (prohibited demographic attribute detection or mathematical calculation inconsistency).
+        Per policy, they are **strictly quarantined and barred from confirmed scholarship ranking** until human review resolves the flag.
+        """)
+        q_records = []
+        for q in quarantined:
+            q_records.append({
+                "Applicant ID": q["applicant_id"],
+                "Candidate Name": q["full_name"],
+                "Status": q["status"],
+                "Preliminary Score": f"{q['total_score']:.2f}" if q.get("total_score") is not None else "—",
+                "Audit Finding": q.get("quarantine_reason") or q.get("audit_notes") or "Flagged during audit",
+            })
+        st.dataframe(pd.DataFrame(q_records), width="stretch", hide_index=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
     # --- CONFIRMED AWARDEES RANKED TABLE ---
     st.markdown("""

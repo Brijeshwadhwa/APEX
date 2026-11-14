@@ -230,3 +230,95 @@ async def test_disqualified_applicant_exclusion_in_panel(audit_logger):
     assert state.total_score is None
     assert "Ineligible" in (state.recommendation or "")
 
+
+@pytest.mark.asyncio
+async def test_fairness_auditor_detects_prohibited_attribute(audit_logger):
+    """Proves that referencing prohibited demographic attributes in rationales triggers a bias audit failure."""
+    raw = {
+        "applicant_id": "APP-BIAS-TEST",
+        "full_name": "Bias Test Applicant",
+        "academic_percentage": 90.0,
+        "household_income": 120000.0,
+    }
+    intake = IntakeAgent(logger=audit_logger)
+    state = await intake.process_applicant(raw)
+    elig = EligibilityAgent(logger=audit_logger)
+    state = await elig.evaluate_applicant(state)
+    state = await MeritAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await FinancialAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await AchievementAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await PanelManagerAgent(logger=audit_logger).adjudicate_applicant(state)
+
+    # Contaminate justification with prohibited attribute mention
+    state.academic_result.justification += " Penalty for gender applied to final ranking."
+
+    auditor = FairnessAuditorAgent(logger=audit_logger)
+    state = await auditor.audit_applicant(state)
+
+    assert state.audit_result.passed is False
+    assert state.audit_result.audit_status == "FAIL"
+    assert state.audit_result.bias_detected is True
+    assert "gender" in state.audit_result.flagged_attributes
+    assert "BIAS DETECTED" in state.audit_result.audit_notes
+
+
+@pytest.mark.asyncio
+async def test_fairness_auditor_detects_score_ceiling_violation(audit_logger):
+    """Proves that component scores exceeding permitted maximums trigger a limit audit failure."""
+    raw = {
+        "applicant_id": "APP-LIMIT-TEST",
+        "full_name": "Limit Test Applicant",
+        "academic_percentage": 90.0,
+        "household_income": 120000.0,
+    }
+    intake = IntakeAgent(logger=audit_logger)
+    state = await intake.process_applicant(raw)
+    elig = EligibilityAgent(logger=audit_logger)
+    state = await elig.evaluate_applicant(state)
+    state = await MeritAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await FinancialAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await AchievementAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await PanelManagerAgent(logger=audit_logger).adjudicate_applicant(state)
+
+    # Tamper academic score to 45.0 (exceeds max 40.0 points)
+    state.academic_result.score = Decimal("45.0")
+    state.total_score = Decimal("105.0")
+
+    auditor = FairnessAuditorAgent(logger=audit_logger)
+    state = await auditor.audit_applicant(state)
+
+    assert state.audit_result.passed is False
+    assert state.audit_result.audit_status == "FAIL"
+    assert state.audit_result.component_limits_verified is False
+    assert "SCORE MAXIMUM VIOLATION" in state.audit_result.audit_notes
+
+
+@pytest.mark.asyncio
+async def test_fairness_auditor_detects_sum_mismatch(audit_logger):
+    """Proves that inconsistent math sums trigger an audit failure."""
+    raw = {
+        "applicant_id": "APP-MATH-TEST",
+        "full_name": "Math Test Applicant",
+        "academic_percentage": 90.0,
+        "household_income": 120000.0,
+    }
+    intake = IntakeAgent(logger=audit_logger)
+    state = await intake.process_applicant(raw)
+    elig = EligibilityAgent(logger=audit_logger)
+    state = await elig.evaluate_applicant(state)
+    state = await MeritAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await FinancialAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await AchievementAgent(logger=audit_logger).evaluate_applicant(state)
+    state = await PanelManagerAgent(logger=audit_logger).adjudicate_applicant(state)
+
+    # Tamper reported total score without changing components
+    state.total_score = Decimal("50.0")  # Actual sum is ~96.0
+
+    auditor = FairnessAuditorAgent(logger=audit_logger)
+    state = await auditor.audit_applicant(state)
+
+    assert state.audit_result.passed is False
+    assert state.audit_result.audit_status == "FAIL"
+    assert state.audit_result.score_consistency_verified is False
+    assert "DISCREPANCY" in state.audit_result.audit_notes
+

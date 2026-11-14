@@ -127,9 +127,12 @@ class AuditResult(BaseModel):
     """Output produced by Fairness Auditor / Consistency Reviewer."""
     applicant_id: str = Field(..., description="Associated applicant ID")
     passed: bool = Field(..., description="Whether decision passes bias and consistency checks")
+    audit_status: str = Field(default="PASS", description="Audit outcome: PASS, FAIL, or NEEDS_REVIEW")
     bias_detected: bool = Field(default=False, description="Flag indicating reliance on prohibited demographics")
     flagged_attributes: List[str] = Field(default_factory=list, description="Prohibited attributes referenced")
     score_consistency_verified: bool = Field(default=True, description="Mathematical sum consistency check")
+    component_limits_verified: bool = Field(default=True, description="Whether all component scores respect maximum ceilings (40, 35, 25)")
+    evidence_based_verified: bool = Field(default=True, description="Whether decisions are grounded exclusively in authorized evaluation evidence")
     audit_notes: str = Field(..., description="Detailed audit narrative")
 
 
@@ -195,6 +198,9 @@ class GeminiRAGResult(BaseModel):
     question: str = Field(..., description="Original user query")
     answer: str = Field(..., description="Grounded answer synthesized from rubric clauses")
     cited_clauses: List[str] = Field(default_factory=list, description="Clause IDs cited in response")
+    rejected_citations: List[str] = Field(default_factory=list, description="Citations returned by model that were not in retrieved passages")
+    retrieved_passages: List[Dict[str, Any]] = Field(default_factory=list, description="Passages retrieved prior to generation")
+    source_document: str = Field(default="scholarship_rubric.md", description="Source rubric file")
     is_grounded: bool = Field(default=True, description="Whether the answer is substantiated by retrieved text")
     rubric_coverage_status: str = Field(..., description="Status e.g. COVERED_IN_RUBRIC or NOT_ESTABLISHED_IN_RUBRIC")
 

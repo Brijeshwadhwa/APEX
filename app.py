@@ -65,8 +65,9 @@ def init_system_resources():
     log_path = os.path.join(base_dir, "execution_audit.jsonl")
     data_path = os.path.join(base_dir, "data", "applicants.json")
     rubric_path = os.path.join(base_dir, "rag", "scholarship_rubric.md")
+    store_path = os.path.join(base_dir, "data", "state_store.json")
 
-    store = StateStore()
+    store = StateStore(persistence_file_path=store_path)
     logger = AuditLogger(log_path)
     retriever = RubricRetriever(rubric_path)
     coordinator = ScholarshipCoordinator(store=store, logger=logger, retriever=retriever)
@@ -179,21 +180,24 @@ with st.sidebar:
             finally:
                 loop.close()
 
-    # Reload Default Mock Applicants
-    if st.button("↺ Reload 17 Sample Applicants", width="stretch"):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(store.clear())
-            from core.schemas import ApplicantProfile
-            for raw in default_applicants:
-                prof = ApplicantProfile.model_validate(raw)
-                st_init = EvaluationState(applicant_id=prof.applicant_id, profile=prof)
-                loop.run_until_complete(store.save_state(st_init))
-            st.sidebar.success("Reset to 17 initial dossiers.")
-            st.rerun()
-        finally:
-            loop.close()
+    # Explicitly Confirmed Reload of Default Mock Applicants
+    with st.sidebar.expander("↺ Demo Reset Controls"):
+        st.caption("Restore initial 17 candidate dossiers. Requires explicit confirmation.")
+        confirm_reset = st.checkbox("Confirm data reset", key="confirm_demo_reset")
+        if st.button("Reset to 17 Sample Applicants", width="stretch", disabled=not confirm_reset):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(store.clear())
+                from core.schemas import ApplicantProfile
+                for raw in default_applicants:
+                    prof = ApplicantProfile.model_validate(raw)
+                    st_init = EvaluationState(applicant_id=prof.applicant_id, profile=prof)
+                    loop.run_until_complete(store.save_state(st_init))
+                st.sidebar.success("Reset to 17 initial dossiers.")
+                st.rerun()
+            finally:
+                loop.close()
 
     # --- GEMINI STATUS WIDGET ---
     st.markdown("<br>", unsafe_allow_html=True)
