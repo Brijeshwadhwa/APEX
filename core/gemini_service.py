@@ -79,9 +79,10 @@ class GeminiService:
         max_output_tokens: int = 1500,
     ) -> None:
         if api_key is not None:
-            self.api_key = api_key.strip()
+            self._explicit_key = api_key.strip()
         else:
-            self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
+            self._explicit_key = None
+
         self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip()
         self.temperature = float(os.getenv("GEMINI_TEMPERATURE", str(temperature)))
         self.max_output_tokens = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", str(max_output_tokens)))
@@ -98,7 +99,7 @@ class GeminiService:
 
         # Initialize Google GenAI client if key exists
         self._client: Optional[genai.Client] = None
-        if self.api_key and self.api_key != "your_gemini_api_key_here":
+        if self.is_configured:
             try:
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:
@@ -106,9 +107,32 @@ class GeminiService:
                 self._client = None
 
     @property
+    def api_key(self) -> str:
+        """Dynamically resolves the active API key from explicit config, environment, .env, or project default."""
+        if self._explicit_key is not None:
+            return self._explicit_key
+        k = os.getenv("GEMINI_API_KEY", "").strip()
+        if k and k != "your_gemini_api_key_here":
+            return k
+        for ep in _env_candidates:
+            if os.path.exists(ep):
+                dotenv.load_dotenv(ep, override=True)
+                k = os.getenv("GEMINI_API_KEY", "").strip()
+                if k and k != "your_gemini_api_key_here":
+                    return k
+        return ""
+
+    @api_key.setter
+    def api_key(self, value: Optional[str]) -> None:
+        self._explicit_key = value.strip() if value is not None else None
+        self._client = None
+        self._connection_verified = None
+
+    @property
     def is_configured(self) -> bool:
         """Checks if a non-placeholder API key is configured."""
-        return bool(self.api_key and self.api_key != "your_gemini_api_key_here")
+        k = self.api_key
+        return bool(k and k != "your_gemini_api_key_here")
 
     def get_masked_api_key(self) -> str:
         """Returns safe masked representation of API key without leaking credentials."""
