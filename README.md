@@ -169,8 +169,8 @@ Copy-Item .env.example .env
 # Edit .env and set GEMINI_API_KEY=your_actual_key
 ```
 
-### Step 2: Run Full Automated Test Suite (65 Tests)
-Verify that all 65 unit, integration, coordinator gate, and Gemini security tests pass:
+### Step 2: Run Full Automated Test Suite (71 Tests)
+Verify that all 71 unit, integration, coordinator gate, and Gemini security tests pass:
 ```powershell
 cd "C:\Users\Hp\Documents\7th SEM THINGS\AGENTIC_AI\CA2 - AGENT\Project"
 .\.venv\Scripts\pytest.exe -v
@@ -184,11 +184,30 @@ cd "C:\Users\Hp\Documents\7th SEM THINGS\AGENTIC_AI\CA2 - AGENT\Project"
 * Open **`http://localhost:8501`** in Chrome/Edge.
 * Use the sidebar to navigate between the 8 pages, test Gemini connectivity, or run batch evaluation.
 
-### Step 3: Run the Demonstration Notebook
+### Step 4: Run the Demonstration Notebook
 * **In VS Code / IDE:** Open [Project/demo.ipynb](file:///c:/Users/Hp/Documents/7th%20SEM%20THINGS/AGENTIC_AI/CA2%20-%20AGENT/Project/demo.ipynb) and select the `Project/.venv` Python 3.13 kernel.
 * **Or via CLI (using system Jupyter):**
   ```powershell
   cd "C:\Users\Hp\Documents\7th SEM THINGS\AGENTIC_AI\CA2 - AGENT\Project"
   jupyter-lab demo.ipynb --runtime-dir="$env:TEMP\jupyter_runtime"
   ```
+
+---
+
+## 10. Cloud Deployment (Streamlit Community Cloud)
+
+The project is pre-configured for 1-click cloud deployment on [Streamlit Community Cloud](https://share.streamlit.io):
+
+1. **Sign in to Streamlit Cloud:** Visit [share.streamlit.io](https://share.streamlit.io) and log in with your GitHub account.
+2. **Deploy Repository:**
+   - **Repository:** `Brijeshwadhwa/APEX`
+   - **Branch:** `main`
+   - **Main file path:** `app.py`
+3. **Environment Secrets:** In *Advanced Settings* -> *Secrets*, configure:
+   ```toml
+   GEMINI_API_KEY = "your_actual_key"
+   GEMINI_MODEL = "gemini-3.5-flash"
+   ```
+4. **Deploy:** Click **Deploy**. Streamlit Cloud automatically installs dependencies from `requirements.txt` and publishes the live public URL.
+
 
